@@ -4,7 +4,7 @@
 #include <sys/time.h>
 #include <omp.h>
 
-#define NROW 1000000000
+#define NROW 100000000
 #define MAXNUMBER 10
 
 int min(int i0, int i1) {
