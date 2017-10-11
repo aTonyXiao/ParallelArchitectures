@@ -2,11 +2,14 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <sys/time.h>
-#include <math.h>
 #include <omp.h>
 
 #define NROW 1000000000
 #define MAXNUMBER 10
+
+int min(int i0, int i1) {
+  return i0 > i1 ? i1 : i0;
+}
 
 double duration(struct timeval t0, struct timeval t1)
 {
@@ -51,7 +54,7 @@ int recippar(int **edges, int nrow) {
         } else if (i == j) {
           count += found[i][j] / 2;
         } else {
-          count += fmin(found[i][j], found[j][i]);
+          count += min(found[i][j], found[j][i]);
         }
       }
     }
