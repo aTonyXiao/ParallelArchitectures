@@ -55,7 +55,7 @@ int recippar(int **edges, int nrow) {
     for (int i = 0; i < MAXNUMBER; i++) {
       for (int j = 0; j < MAXNUMBER; j++) {
         if (j > i) {
-          continue;
+          break;
         } else if (i == j) {
           count += found[i][j] / 2;
         } else {
