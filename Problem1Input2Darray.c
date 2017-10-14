@@ -6,21 +6,19 @@
 
 #define NROW 100000000
 #define MAXNUMBER 10
-
+//2 dimensional array in memory storage for M*N matrix row major: i*N+j
 int min(int i0, int i1) {
   return i0 > i1 ? i1 : i0;
 }
 
-int getNum(int* edges, int row, int col){
-  return edges[row * 2 + col];
-}
+
 
 double duration(struct timeval t0, struct timeval t1)
 {
     return (t1.tv_sec - t0.tv_sec) * 1000.0 + (t1.tv_usec - t0.tv_usec) / 1000.0;
 }
 
-int recippar(int *edges, int nrow) {
+int recippar(int **edges, int nrow) {
   int count = 0;
   int found[MAXNUMBER][MAXNUMBER] = {{0}};
   #pragma omp parallel
@@ -30,8 +28,8 @@ int recippar(int *edges, int nrow) {
     int me = omp_get_thread_num();
     int nth = omp_get_num_threads();
     for (int i = me; i < nrow; i += nth) {
-      int first = getNum(edges, i, 0);
-      int second = getNum(edges, i, 1);
+      int first = edges[i][0];
+      int second = edges[i][1];
       if (local_found[second][first] > 0) {
         local_found[second][first] -= 1;
         local_count += 1;
@@ -72,12 +70,11 @@ int recippar(int *edges, int nrow) {
 }
 
 int main() {
-  int *edges = (int *)malloc(sizeof(int) * NROW * 2);
-
-  for (int i = 0; i < NROW * 2; i++) {
-    // edges[i] = (int *)malloc(sizeof(int) * 2);
-    edges[i] = rand() % MAXNUMBER;
-    // edges[i][1] = rand() % MAXNUMBER;
+  int **edges = (int **)malloc(sizeof(int *) * NROW);
+  for (int i = 0; i < NROW; i++) {
+    edges[i] = (int *)malloc(sizeof(int) * 2);
+    edges[i][0] = rand() % MAXNUMBER;
+    edges[i][1] = rand() % MAXNUMBER;
   }
   struct timeval start;
   gettimeofday(&start, NULL);
