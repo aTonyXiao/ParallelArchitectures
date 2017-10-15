@@ -59,7 +59,7 @@ int recippar(int *edges, int nrow) {
         array[0] = found_first;
         array[1] = first;
         array[2] = -1;
-        local_found = -((int)array);
+        local_found[first] = -((long)array);
       }
     }
     for (int i = 0; i < INT_MAX; i++) {
@@ -81,6 +81,7 @@ int recippar(int *edges, int nrow) {
                 }
               }
             }
+            found[i] = -((long)array);
           } else if (found[i] == 0) { // found[i] has nothing
             found[i] = local_found[i];
           } else { // found[i] has an array of integers
