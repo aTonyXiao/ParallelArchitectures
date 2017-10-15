@@ -5,7 +5,9 @@
 #include <sys/time.h>
 #include <omp.h>
 
-#define NROW 4841532
+#define NROW 1768149
+
+#define ARRAY_SIZE 30
 
 int min(int i0, int i1) {
   return i0 > i1 ? i1 : i0;
@@ -18,24 +20,24 @@ double duration(struct timeval t0, struct timeval t1)
 
 int recippar(int *edges, int nrow) {
   int count = 0;
-  long found[INT_MAX] = {0};
+  long *found = calloc(INT_MAX, sizeof(long));
+  omp_set_num_threads(4);
   #pragma omp parallel
   {
     int thread_num = omp_get_thread_num();
     int nth = omp_get_num_threads();
     int local_count = 0;
-    long local_found[INT_MAX] = {0};
-    // int *local_found = calloc(INT_MAX, sizeof(int));
-    for (int i = thread_num; i < nrow; i += nth * 2) {
+    long *local_found = calloc(INT_MAX, sizeof(long));
+    for (int i = thread_num; i < nrow * 2; i += nth * 2) {
       int first = edges[i];
       int second = edges[i + 1];
       long found_first = local_found[second];
-      if (found_first == first) {
+      if (found_first == first) { // found a value
         local_found[second] = 0;
         local_count += 1;
-      } else if (found_first == 0) {
+      } else if (found_first == 0) { // found nothing
         local_found[first] = second;
-      } else if (found_first < 0) {
+      } else if (found_first < 0) { // found an array
         int *array = (int *)(-found_first);
         int insert_location = -1;
         for (int i = 0; true; i++) {
@@ -48,26 +50,27 @@ int recippar(int *edges, int nrow) {
             insert_location = i;
           } else if (array[i] == -1) {
             insert_location = i;
+            array[insert_location + 1] = -1;
             break;
           }
         }
         if (insert_location != -1) {
-          array[insert_location] = first;
+          array[insert_location] = second;
         }
-      } else {
-        int *array = (int *)malloc(sizeof(int) * 5);
+      } else { // found a value that is not the same
+        int *array = (int *)malloc(sizeof(int) * ARRAY_SIZE);
         array[0] = found_first;
-        array[1] = first;
+        array[1] = second;
         array[2] = -1;
         local_found[first] = -((long)array);
       }
     }
-    for (int i = 0; i < INT_MAX; i++) {
+    for (long i = 0; i < INT_MAX; i++) {
       if (local_found[i] != 0) {
         #pragma omp critical
         {
           if (found[i] > 0) { // found[i] has an integer
-            int *array = (int *)malloc(sizeof(int) * 5 * nth);
+            int *array = (int *)malloc(sizeof(int) * ARRAY_SIZE * nth);
             array[0] = found[i];
             if (local_found[i] > 0) { // local_found[i] has an integer
               array[1] = local_found[i];
@@ -94,7 +97,7 @@ int recippar(int *edges, int nrow) {
             } else if (local_found[i] < 0) { // local found has an array of integers
               int *local_array = (int *)(-local_found[i]);
               for (int i = 0; true; i++) {
-                array[insert_location + i] = local_array[i];
+                array[insert_location] = local_array[i];
                 if (local_array[i] == -1) {
                   break;
                 }
@@ -111,7 +114,7 @@ int recippar(int *edges, int nrow) {
   }
   #pragma omp barrier
   {
-    for (int i = 0; i < INT_MAX; i++) {
+    for (long i = 0; i < INT_MAX; i++) {
       long j = found[i];
       if (j > 0) { // found a value
         long first = found[j];
@@ -119,36 +122,44 @@ int recippar(int *edges, int nrow) {
           count += 1;
           found[i] = 0;
           found[j] = 0;
-        } else if (first == 0) { // found nothing
+        } else if (first >= 0) { // found nothing
           found[i] = 0;
         } else { // found an array
-          int *array = (int *)(-first);
-          for (int k = 0; array[k] != -1; k++) {
-            if (first == array[k]) {
+          int *inside_array = (int *)(-first);
+          for (int actual_j = 0; true; actual_j++) {
+            if (first == inside_array[actual_j]) {
               count += 1;
               found[i] = 0;
-              array[k] = 0;
+              inside_array[actual_j] = 0;
+              break;
+            } else if (inside_array[actual_j] == -1) {
+              found[i] = 0;
+              break;
             }
           }
         }
       } else if (j < 0) { // found an array
         int *array = (int *)(-j);
-        for (int k = 0; array[k] != -1; k++) {
-          int actual_j = array[k];
+        for (int i_index = 0; array[i_index] != -1; i_index++) {
+          int actual_j = array[i_index];
           long first = found[actual_j];
           if (first == i) { // found a value
             count += 1;
-            array[k] = 0;
+            array[i_index] = 0;
             found[actual_j] = 0;
-          } else if (first == 0) { // found nothing
-            array[k] = 0;
+          } else if (first >= 0) { // found nothing
+            array[i_index] = 0;
           } else { // found an array
-            int *second_array = (int *)(-first);
-            for (int m = 0; second_array[m] != -1; m++) {
-              if (first == second_array[m]) {
+            int *inside_array = (int *)(-first);
+            for (int first_index = 0; true; first_index++) {
+              if (first == inside_array[first_index]) {
                 count += 1;
-                array[k] = 0;
-                second_array[m] = 0;
+                array[i_index] = 0;
+                inside_array[first_index] = 0;
+                break;
+              } else if (inside_array[first_index] == -1) {
+                array[i_index] = 0;
+                break;
               }
             }
           }
@@ -161,8 +172,8 @@ int recippar(int *edges, int nrow) {
 
 int main() {
   FILE *twitter_combined = fopen("twitter_combined.txt", "r");
-  int *edges = (int *)malloc(sizeof(int) * NROW);
-  for (int i = 0; i < NROW; i++) {
+  int *edges = (int *)malloc(sizeof(int) * NROW * 2);
+  for (int i = 0; i < NROW * 2; i++) {
     fscanf(twitter_combined, "%d", &edges[i]);
   }
   struct timeval start;
