@@ -113,24 +113,71 @@ void insert_store_into_map(long *map, long store, int index, int max_array_size)
 int recippar(int *edges, int nrow) {
   int count = 0;
   long *map = calloc(INT_MAX, sizeof(long));
-  #pragma omp for
-  for (int i = 0; i < nrow * 2; i += 2) {
-    int first = edges[i], second = edges[i + 1];
-    long store = map[second];
-    if (store == first) { // found a value
-      map[second] = 0;
-      count += 1;
-    } else if (store >= 0) { // found nothing
-      insert_value_into_map(map, second, first, ARRAY_SIZE);
-    } else if (store < 0) { // found an array
-      if (find_and_erase_value_in_store(store, first)) {
-        count += 1;
-      } else {
-        insert_value_into_map(map, second, first, ARRAY_SIZE);
+  #pragma omp parallel
+  {
+    int thread_num = omp_get_thread_num();
+    int nth = omp_get_num_threads();
+    int local_count = 0;
+    long *local_map = calloc(INT_MAX, sizeof(long));
+    for (int i = thread_num * 2; i < nrow * 2; i += nth * 2) {
+      int first = edges[i], second = edges[i + 1];
+      long store = local_map[second];
+      if (store == first) { // found a value
+        local_map[second] = 0;
+        local_count += 1;
+      } else if (store >= 0) { // found nothing
+        insert_value_into_map(local_map, second, first, ARRAY_SIZE);
+      } else if (store < 0) { // found an array
+        if (find_and_erase_value_in_store(store, first)) {
+          local_count += 1;
+        } else {
+          insert_value_into_map(local_map, second, first, ARRAY_SIZE);
+        }
       }
     }
+    for (int i = i; i < INT_MAX; i++) {
+      long store = local_map[i];
+      if (store > 0) { // found a value
+        #pragma omp critical
+        {
+          insert_value_into_map(map, store, i, ARRAY_SIZE * nth);
+        }
+      } else if (store < 0) { // found an array
+        #pragma omp critical
+        {
+          insert_store_into_map(map, store, i, ARRAY_SIZE * nth);
+        }
+        int *array = (int *)(-store);
+        free(array);
+      }
+    }
+    free(local_map);
+    #pragma omp critical
+    {
+      count += local_count;
+    }
   }
-  return count;
+  #pragma omp barrier
+  {
+    for (int i = 1; i < INT_MAX; i++) {
+      long store = map[i];
+      if (store > 0 && store != i) { // found a value
+        if (find_and_erase_value_in_map(map, i, store)) {
+          count += 1;
+        }
+      } else if (store < 0) { // found an array
+        int *values = (int *)(-store);
+        for (int index = 0; values[index] != -1; index++) {
+          if (values[index] > 0 && values[index] != i) {
+            if (find_and_erase_value_in_map(map, i, values[index])) {
+              count += 1;
+            }
+          }
+        }
+      }
+    }
+    return count;
+  }
 }
 
 int main() {
