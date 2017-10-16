@@ -9,10 +9,6 @@
 
 #define ARRAY_SIZE 1000
 
-int min(int i0, int i1) {
-  return i0 > i1 ? i1 : i0;
-}
-
 double duration(struct timeval t0, struct timeval t1)
 {
     return (t1.tv_sec - t0.tv_sec) * 1000.0 + (t1.tv_usec - t0.tv_usec) / 1000.0;
