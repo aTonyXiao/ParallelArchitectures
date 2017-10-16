@@ -7,7 +7,7 @@
 
 #define NROW 1768149
 
-#define ARRAY_SIZE 30
+#define ARRAY_SIZE 20
 
 int min(int i0, int i1) {
   return i0 > i1 ? i1 : i0;
@@ -18,149 +18,163 @@ double duration(struct timeval t0, struct timeval t1)
     return (t1.tv_sec - t0.tv_sec) * 1000.0 + (t1.tv_usec - t0.tv_usec) / 1000.0;
 }
 
+int *combine_into_array(int old_value, int new_value, int size) {
+  int *array = (int *)malloc(sizeof(int) * size);
+  array[0] = old_value;
+  array[1] = new_value;
+  array[2] = -1;
+  return array;
+}
+
+bool find_and_erase_value_in_array(int *array, int value) {
+  for (int i = 0; array[i] != -1; i++) {
+    if (array[i] == value) {
+      array[i] = 0;
+      return true;
+    }
+  }
+  return false;
+}
+
+void insert_value_into_array(int *array, int value) {
+  for (int i = 0; true; i++) {
+    if (array[i] == 0) {
+      array[i] = value;
+      break;
+    } else if (array[i] == -1) {
+      array[i] = value;
+      array[i + 1] = -1;
+      break;
+    }
+  }
+}
+
+int *reduce_array_to_value_if_possible(int *array) {
+  int value = 0;
+  for (int i = 0; array[i] != -1; i++) {
+    if (array[i] > 0) {
+      if (value > 0) { // array has more than one value
+        return array;
+      } else {
+        value = array[i];
+      }
+    }
+  }
+  free(array); // TODO: check if can speed things up
+  return (int *)((long)value);
+}
+
+bool find_and_erase_value_in_map(long *map, int value, int index) {
+  long store = map[index];
+  if (store > 0) {
+    if (store == value) {
+      map[index] = 0;
+      return true;
+    } else {
+      return false;
+    }
+  } else if (store < 0) {
+    int *array = (int *)(-store);
+    if (find_and_erase_value_in_array(array, value)) {
+      map[index] = (long)reduce_array_to_value_if_possible(array); // TODO: check if can speed things up
+      return true;
+    } else {
+      return false;
+    }
+  } else {
+    return false;
+  }
+}
+
+void insert_value_into_map(long *map, int value, int index, int max_array_size) {
+  long store = map[index];
+  if (store == 0) {
+    map[index] = value;
+  } else if (store > 0) {
+    int *array = combine_into_array((int)store, value, max_array_size);
+    map[index] = -((long)array);
+  } else if (store < 0) {
+    int *array = (int *)(-store);
+    insert_value_into_array(array, value);
+    map[index] = (long)reduce_array_to_value_if_possible(array);
+  }
+}
+
+// TODO: check if rewrite this function can speed things up
+void insert_values_into_map(long *map, int *values, int index, int max_array_size) {
+  for (int i = 0; values[i] != -1; i++) {
+    int value = values[i];
+    if (value > 0) {
+      insert_value_into_map(map, value, index, max_array_size);
+    }
+  }
+}
+
 int recippar(int *edges, int nrow) {
   int count = 0;
-  long *found = calloc(INT_MAX, sizeof(long));
+  long *map = calloc(INT_MAX, sizeof(long));
   omp_set_num_threads(4);
   #pragma omp parallel
   {
     int thread_num = omp_get_thread_num();
     int nth = omp_get_num_threads();
     int local_count = 0;
-    long *local_found = calloc(INT_MAX, sizeof(long));
-    for (int i = thread_num; i < nrow * 2; i += nth * 2) {
-      int first = edges[i];
-      int second = edges[i + 1];
-      long found_first = local_found[second];
-      if (found_first == first) { // found a value
-        local_found[second] = 0;
+    long *local_map = calloc(INT_MAX, sizeof(long));
+    for (int i = thread_num * 2; i < nrow * 2; i += nth * 2) {
+      int first = edges[i], second = edges[i + 1];
+      long store = local_map[second];
+      if (store == first) { // found a value
+        local_map[second] = 0;
         local_count += 1;
-      } else if (found_first == 0) { // found nothing
-        local_found[first] = second;
-      } else if (found_first < 0) { // found an array
-        int *array = (int *)(-found_first);
-        int insert_location = -1;
-        for (int i = 0; true; i++) {
-          if (array[i] == first) {
-            array[i] = 0;
-            insert_location = -1;
-            local_count += 1;
-            break;
-          } else if (array[i] == 0 && insert_location == -1) {
-            insert_location = i;
-          } else if (array[i] == -1) {
-            insert_location = i;
-            array[insert_location + 1] = -1;
-            break;
-          }
-        }
-        if (insert_location != -1) {
-          array[insert_location] = second;
-        }
-      } else { // found a value that is not the same
-        int *array = (int *)malloc(sizeof(int) * ARRAY_SIZE);
-        array[0] = found_first;
-        array[1] = second;
-        array[2] = -1;
-        local_found[first] = -((long)array);
-      }
-    }
-    for (long i = 0; i < INT_MAX; i++) {
-      if (local_found[i] != 0) {
-        #pragma omp critical
-        {
-          if (found[i] > 0) { // found[i] has an integer
-            int *array = (int *)malloc(sizeof(int) * ARRAY_SIZE * nth);
-            array[0] = found[i];
-            if (local_found[i] > 0) { // local_found[i] has an integer
-              array[1] = local_found[i];
-              array[2] = -1;
-            } else if (local_found[i] < 0) { // local_found[i] has an array of integers
-              int *local_array = (int *)(-local_found[i]);
-              for (int i = 0; true; i++) {
-                array[i + 1] = local_array[i];
-                if (local_array[i] == -1) {
-                  break;
-                }
-              }
-            }
-            found[i] = -((long)array);
-          } else if (found[i] == 0) { // found[i] has nothing
-            found[i] = local_found[i];
-          } else { // found[i] has an array of integers
-            int *array = (int *)(-found[i]);
-            int insert_location = 2;
-            for (insert_location = 2; array[insert_location] != -1; insert_location++);
-            if (local_found[i] > 0) { // local found has an integer
-              array[insert_location] = local_found[i];
-              array[insert_location + 1] = -1;
-            } else if (local_found[i] < 0) { // local found has an array of integers
-              int *local_array = (int *)(-local_found[i]);
-              for (int i = 0; true; i++) {
-                array[insert_location] = local_array[i];
-                if (local_array[i] == -1) {
-                  break;
-                }
-              }
-            }
-          }
+      } else if (store >= 0) { // found nothing
+        insert_value_into_map(local_map, second, first, ARRAY_SIZE);
+      } else if (store < 0) { // found an array
+        int *values = (int *)(-store);
+        if (find_and_erase_value_in_array(values, first)) {
+          local_count += 1;
+        } else {
+          insert_value_into_map(local_map, second, first, ARRAY_SIZE);
         }
       }
     }
     #pragma omp critical
     {
+      printf("Thread %d Count: %d\n", thread_num, local_count);
       count += local_count;
+    }
+    for (int i = 0; i < INT_MAX; i++) {
+      long store = local_map[i];
+      if (store > 0) { // found a value
+        #pragma omp critical
+        {
+          insert_value_into_map(map, store, i, ARRAY_SIZE * nth);
+        }
+      } else if (store < 0) { // found an array
+        #pragma omp critical
+        {
+          int *values = (int *)(-store);
+          insert_values_into_map(map, values, i, ARRAY_SIZE * nth);
+        }
+      }
     }
   }
   #pragma omp barrier
   {
-    for (long i = 0; i < INT_MAX; i++) {
-      long j = found[i];
-      if (j > 0) { // found a value
-        long first = found[j];
-        if (first == i) { // found a value
+    printf("Count (Before Merge): %d\n", count);
+    for (int first = 0; first < INT_MAX; first++) {
+      long store = map[first];
+      if (store > 0) { // found a value
+        int second = (int)store;
+        if (find_and_erase_value_in_map(map, first, second)) {
           count += 1;
-          found[i] = 0;
-          found[j] = 0;
-        } else if (first >= 0) { // found nothing
-          found[i] = 0;
-        } else { // found an array
-          int *inside_array = (int *)(-first);
-          for (int actual_j = 0; true; actual_j++) {
-            if (first == inside_array[actual_j]) {
-              count += 1;
-              found[i] = 0;
-              inside_array[actual_j] = 0;
-              break;
-            } else if (inside_array[actual_j] == -1) {
-              found[i] = 0;
-              break;
-            }
-          }
         }
-      } else if (j < 0) { // found an array
-        int *array = (int *)(-j);
-        for (int i_index = 0; array[i_index] != -1; i_index++) {
-          int actual_j = array[i_index];
-          long first = found[actual_j];
-          if (first == i) { // found a value
-            count += 1;
-            array[i_index] = 0;
-            found[actual_j] = 0;
-          } else if (first >= 0) { // found nothing
-            array[i_index] = 0;
-          } else { // found an array
-            int *inside_array = (int *)(-first);
-            for (int first_index = 0; true; first_index++) {
-              if (first == inside_array[first_index]) {
-                count += 1;
-                array[i_index] = 0;
-                inside_array[first_index] = 0;
-                break;
-              } else if (inside_array[first_index] == -1) {
-                array[i_index] = 0;
-                break;
-              }
+      } else if (store < 0) { // found an array
+        int *values = (int *)(-store);
+        for (int i = 0; values[i] != -1; i++) {
+          int second = values[i];
+          if (second > 0) {
+            if (find_and_erase_value_in_map(map, first, second)) {
+              count += 1;
             }
           }
         }
