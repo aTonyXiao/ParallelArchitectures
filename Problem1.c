@@ -7,7 +7,7 @@
 
 #define NROW 1768149
 
-#define ARRAY_SIZE 20
+#define ARRAY_SIZE 1000
 
 int min(int i0, int i1) {
   return i0 > i1 ? i1 : i0;
@@ -18,15 +18,16 @@ double duration(struct timeval t0, struct timeval t1)
     return (t1.tv_sec - t0.tv_sec) * 1000.0 + (t1.tv_usec - t0.tv_usec) / 1000.0;
 }
 
-int *combine_into_array(int old_value, int new_value, int size) {
+long combine_into_store(int old_value, int new_value, int size) {
   int *array = (int *)malloc(sizeof(int) * size);
   array[0] = old_value;
   array[1] = new_value;
   array[2] = -1;
-  return array;
+  return -((long)array);
 }
 
-bool find_and_erase_value_in_array(int *array, int value) {
+bool find_and_erase_value_in_store(long store, int value) {
+  int *array = (int *)(-store);
   for (int i = 0; array[i] != -1; i++) {
     if (array[i] == value) {
       array[i] = 0;
@@ -36,7 +37,8 @@ bool find_and_erase_value_in_array(int *array, int value) {
   return false;
 }
 
-void insert_value_into_array(int *array, int value) {
+void insert_value_into_store(long store, int value) {
+  int *array = (int *)(-store);
   for (int i = 0; true; i++) {
     if (array[i] == 0) {
       array[i] = value;
@@ -49,19 +51,20 @@ void insert_value_into_array(int *array, int value) {
   }
 }
 
-int *reduce_array_to_value_if_possible(int *array) {
+long reduce_store_to_value_if_possible(long store) {
   int value = 0;
+  int *array = (int *)(-store);
   for (int i = 0; array[i] != -1; i++) {
     if (array[i] > 0) {
       if (value > 0) { // array has more than one value
-        return array;
+        return store;
       } else {
         value = array[i];
       }
     }
   }
-  free(array); // TODO: check if can speed things up
-  return (int *)((long)value);
+  free(array);
+  return value;
 }
 
 bool find_and_erase_value_in_map(long *map, int value, int index) {
@@ -74,9 +77,8 @@ bool find_and_erase_value_in_map(long *map, int value, int index) {
       return false;
     }
   } else if (store < 0) {
-    int *array = (int *)(-store);
-    if (find_and_erase_value_in_array(array, value)) {
-      map[index] = (long)reduce_array_to_value_if_possible(array); // TODO: check if can speed things up
+    if (find_and_erase_value_in_store(store, value)) {
+      map[index] = reduce_store_to_value_if_possible(store);
       return true;
     } else {
       return false;
@@ -91,19 +93,17 @@ void insert_value_into_map(long *map, int value, int index, int max_array_size) 
   if (store == 0) {
     map[index] = value;
   } else if (store > 0) {
-    int *array = combine_into_array((int)store, value, max_array_size);
-    map[index] = -((long)array);
+    map[index] = combine_into_store((int)store, value, max_array_size);
   } else if (store < 0) {
-    int *array = (int *)(-store);
-    insert_value_into_array(array, value);
-    map[index] = (long)reduce_array_to_value_if_possible(array);
+    insert_value_into_store(store, value);
+    map[index] = reduce_store_to_value_if_possible(store);
   }
 }
 
-// TODO: check if rewrite this function can speed things up
-void insert_values_into_map(long *map, int *values, int index, int max_array_size) {
-  for (int i = 0; values[i] != -1; i++) {
-    int value = values[i];
+void insert_store_into_map(long *map, long store, int index, int max_array_size) {
+  int *array = (int *)(-store);
+  for (int i = 0; array[i] != -1; i++) {
+    int value = array[i];
     if (value > 0) {
       insert_value_into_map(map, value, index, max_array_size);
     }
@@ -113,7 +113,6 @@ void insert_values_into_map(long *map, int *values, int index, int max_array_siz
 int recippar(int *edges, int nrow) {
   int count = 0;
   long *map = calloc(INT_MAX, sizeof(long));
-  omp_set_num_threads(4);
   #pragma omp parallel
   {
     int thread_num = omp_get_thread_num();
@@ -129,20 +128,14 @@ int recippar(int *edges, int nrow) {
       } else if (store >= 0) { // found nothing
         insert_value_into_map(local_map, second, first, ARRAY_SIZE);
       } else if (store < 0) { // found an array
-        int *values = (int *)(-store);
-        if (find_and_erase_value_in_array(values, first)) {
+        if (find_and_erase_value_in_store(store, first)) {
           local_count += 1;
         } else {
           insert_value_into_map(local_map, second, first, ARRAY_SIZE);
         }
       }
     }
-    #pragma omp critical
-    {
-      printf("Thread %d Count: %d\n", thread_num, local_count);
-      count += local_count;
-    }
-    for (int i = 0; i < INT_MAX; i++) {
+    for (int i = i; i < INT_MAX; i++) {
       long store = local_map[i];
       if (store > 0) { // found a value
         #pragma omp critical
@@ -152,28 +145,31 @@ int recippar(int *edges, int nrow) {
       } else if (store < 0) { // found an array
         #pragma omp critical
         {
-          int *values = (int *)(-store);
-          insert_values_into_map(map, values, i, ARRAY_SIZE * nth);
+          insert_store_into_map(map, store, i, ARRAY_SIZE * nth);
         }
+        int *array = (int *)(-store);
+        free(array);
       }
+    }
+    free(local_map);
+    #pragma omp critical
+    {
+      count += local_count;
     }
   }
   #pragma omp barrier
   {
-    printf("Count (Before Merge): %d\n", count);
-    for (int first = 0; first < INT_MAX; first++) {
-      long store = map[first];
-      if (store > 0) { // found a value
-        int second = (int)store;
-        if (find_and_erase_value_in_map(map, first, second)) {
+    for (int i = 1; i < INT_MAX; i++) {
+      long store = map[i];
+      if (store > 0 && store != i) { // found a value
+        if (find_and_erase_value_in_map(map, i, store)) {
           count += 1;
         }
       } else if (store < 0) { // found an array
         int *values = (int *)(-store);
-        for (int i = 0; values[i] != -1; i++) {
-          int second = values[i];
-          if (second > 0) {
-            if (find_and_erase_value_in_map(map, first, second)) {
+        for (int index = 0; values[index] != -1; index++) {
+          if (values[index] > 0 && values[index] != i) {
+            if (find_and_erase_value_in_map(map, i, values[index])) {
               count += 1;
             }
           }
