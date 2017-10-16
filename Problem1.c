@@ -7,14 +7,14 @@
 
 #define NROW 1768149
 
-#define ARRAY_SIZE 1000
+#define ARRAY_SIZE 600
 
-double duration(struct timeval t0, struct timeval t1)
+static inline double duration(struct timeval t0, struct timeval t1)
 {
-    return (t1.tv_sec - t0.tv_sec) * 1000.0 + (t1.tv_usec - t0.tv_usec) / 1000.0;
+    return (t1.tv_sec - t0.tv_sec) + (t1.tv_usec - t0.tv_usec) / 1000000.0;
 }
 
-long combine_into_store(int old_value, int new_value, int size) {
+static inline long combine_into_store(int old_value, int new_value, int size) {
   int *array = (int *)malloc(sizeof(int) * size);
   array[0] = old_value;
   array[1] = new_value;
@@ -22,9 +22,11 @@ long combine_into_store(int old_value, int new_value, int size) {
   return -((long)array);
 }
 
-bool find_and_erase_value_in_store(long store, int value) {
+static inline bool find_and_erase_value_in_store(long store, int value) {
   int *array = (int *)(-store);
+  int size = 0;
   for (int i = 0; array[i] != -1; i++) {
+    size ++;
     if (array[i] == value) {
       array[i] = 0;
       return true;
@@ -33,7 +35,7 @@ bool find_and_erase_value_in_store(long store, int value) {
   return false;
 }
 
-void insert_value_into_store(long store, int value) {
+static inline void insert_value_into_store(long store, int value) {
   int *array = (int *)(-store);
   for (int i = 0; true; i++) {
     if (array[i] == 0) {
@@ -47,7 +49,7 @@ void insert_value_into_store(long store, int value) {
   }
 }
 
-long reduce_store_to_value_if_possible(long store) {
+static inline long reduce_store_to_value_if_possible(long store) {
   int value = 0;
   int *array = (int *)(-store);
   for (int i = 0; array[i] != -1; i++) {
@@ -59,32 +61,10 @@ long reduce_store_to_value_if_possible(long store) {
       }
     }
   }
-  free(array);
   return value;
 }
 
-bool find_and_erase_value_in_map(long *map, int value, int index) {
-  long store = map[index];
-  if (store > 0) {
-    if (store == value) {
-      map[index] = 0;
-      return true;
-    } else {
-      return false;
-    }
-  } else if (store < 0) {
-    if (find_and_erase_value_in_store(store, value)) {
-      map[index] = reduce_store_to_value_if_possible(store);
-      return true;
-    } else {
-      return false;
-    }
-  } else {
-    return false;
-  }
-}
-
-void insert_value_into_map(long *map, int value, int index, int max_array_size) {
+static inline void insert_value_into_map(long *map, int value, int index, int max_array_size) {
   long store = map[index];
   if (store == 0) {
     map[index] = value;
@@ -93,16 +73,6 @@ void insert_value_into_map(long *map, int value, int index, int max_array_size) 
   } else if (store < 0) {
     insert_value_into_store(store, value);
     map[index] = reduce_store_to_value_if_possible(store);
-  }
-}
-
-void insert_store_into_map(long *map, long store, int index, int max_array_size) {
-  int *array = (int *)(-store);
-  for (int i = 0; array[i] != -1; i++) {
-    int value = array[i];
-    if (value > 0) {
-      insert_value_into_map(map, value, index, max_array_size);
-    }
   }
 }
 
@@ -135,11 +105,10 @@ int main() {
   for (int i = 0; i < NROW * 2; i++) {
     fscanf(twitter_combined, "%d", &edges[i]);
   }
-  struct timeval start;
+  struct timeval start, end;
   gettimeofday(&start, NULL);
   int count = recippar(edges, NROW);
-  struct timeval end;
   gettimeofday(&end, NULL);
-  printf("Count: %d\nDuration: %lf\n", count, duration(start, end));
+  printf("Output: %d (%lfs)\n", count, duration(start, end));
   return 0;
 }

@@ -63,27 +63,6 @@ long reduce_store_to_value_if_possible(long store) {
   return value;
 }
 
-bool find_and_erase_value_in_map(long *map, int value, int index) {
-  long store = map[index];
-  if (store > 0) {
-    if (store == value) {
-      map[index] = 0;
-      return true;
-    } else {
-      return false;
-    }
-  } else if (store < 0) {
-    if (find_and_erase_value_in_store(store, value)) {
-      map[index] = reduce_store_to_value_if_possible(store);
-      return true;
-    } else {
-      return false;
-    }
-  } else {
-    return false;
-  }
-}
-
 void insert_value_into_map(long *map, int value, int index, int max_array_size) {
   long store = map[index];
   if (store == 0) {
@@ -93,16 +72,6 @@ void insert_value_into_map(long *map, int value, int index, int max_array_size) 
   } else if (store < 0) {
     insert_value_into_store(store, value);
     map[index] = reduce_store_to_value_if_possible(store);
-  }
-}
-
-void insert_store_into_map(long *map, long store, int index, int max_array_size) {
-  int *array = (int *)(-store);
-  for (int i = 0; array[i] != -1; i++) {
-    int value = array[i];
-    if (value > 0) {
-      insert_value_into_map(map, value, index, max_array_size);
-    }
   }
 }
 
