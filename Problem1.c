@@ -7,7 +7,7 @@
 
 #define NROW 1768149
 
-#define ARRAY_SIZE 600
+#define ARRAY_SIZE 1000
 
 static inline double duration(struct timeval t0, struct timeval t1)
 {
