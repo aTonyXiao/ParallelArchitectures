@@ -1,23 +1,18 @@
 library(data.table)
 library(parallel)
 
-edges = fread("twitter_combined.txt", sep = " ", header = FALSE)
-
 recippar <- function(edges) {
-  nrow = nrow(edges)
-  nthread = 4
-  edges = edges[order(edges[,1], edges[,2])] # sort the data.table
-  # cluster = makePSOCKcluster(rep("localhost", nthread))
-  # chunk <- sample.int(nrow, nrow, replace = TRUE) # generate the random num for later each chunk
-  count = 0
-  for (i in 1:nrow(edges)) {
-    found = edges[V1==edges[i]$V2 & V2==edges[i]$V1]
-    if (nrow(found) > 0) {
-      count = count + 1
-    }
-  }
-  count
+  edges$V3 = paste(edges$V1, edges$V2)
+  edges$V4 = paste(edges$V2, edges$V1)
+  found = intersect(edges$V3, edges$V4)
+  same = edges[edges$V1 == edges$V2]
+  (length(found) - nrow(same)) / 2
 }
 
-count = recippar(edges) / 2
+edges = fread("twitter_combined.txt", sep = " ", header = FALSE)
+start = as.numeric(Sys.time())
+count = recippar(edges)
+end = as.numeric(Sys.time())
+
 print(count)
+print(end - start)
