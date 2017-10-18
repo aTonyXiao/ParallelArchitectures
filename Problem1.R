@@ -1,38 +1,27 @@
-recippar <- function (edges) {
-	maxNum = 20
-	matrix = list()
-	matrix[[maxNum]] = NA
-	count = 0
-	total = 0
-	for (i in 1:nrow(edges)) {
-		pairs = as.numeric(edges[i])	
-		first = pairs[1]
-		second = pairs[2]
-		matrix[[first]] = c(second, matrix[[first]])
-	}
-	
-	separate <- function(cls, matrix) {
-		rowgrps = splitIndices(length(matrix), length(cls))
-		local <- function (rows) {
-			for (r in rows)
-				for (i in matrix[[r]])
-					if (r %in% matrix[[i]])
-						count = count + 1
-			count
-		}
+library(data.table)
+library(parallel)
 
-		ans = clusterApply(cluster, rowgrps, local)
-		for (res in ans)
-			total = total + sum(res)
-		total / 2
-	}
-	
-	separate(cluster, matrix)
+recippar <- function(edges) {
+  require(parallel)
+  local_edges <- splitIndices(nrow(edges), myinfo$nwrkrs)[[myinfo$id]]
+  local_edges$V3 = paste(local_edges$V1, local_edges$V2)
+  local_edges$V4 = paste(local_edges$V2, local_edges$V1)
+  barr()
+  found = intersect(edges$V3, edges$V4)
+  same = edges[edges$V1 == edges$V2]
+  (length(found) - nrow(same)) / 2
 }
 
-library(data.table)
-library(parallel)	
-nthread = 4
-cluster = makePSOCKcluster(rep("localhost", nthread))
-data = fread("test1.txt", sep = " ", header = FALSE)
-recippar(data)
+edges = fread("twitter_combined.txt", sep = " ", header = FALSE)
+
+cluster = makecluster(rep("localhost", 4))
+mgrinit(cluster)
+clusterEvalQ(cluster, id <- myinfo$id)
+clusterExport(cluster, "recippar")
+
+start = as.numeric(Sys.time())
+count = clusterEvalQ(cluster, recippar(edges))
+end = as.numeric(Sys.time())
+
+print(count)
+print(end - start)
