@@ -15,12 +15,3 @@ recippar <- function(edges) {
 merge_edges <- function(edge) {
   paste(edge[,1], edge[,2])
 }
-
-edges = fread("twitter_combined.txt", sep = " ", header = FALSE)
-
-start = as.numeric(Sys.time())
-count = recippar(edges)
-end = as.numeric(Sys.time())
-
-print(count)
-print(end - start)

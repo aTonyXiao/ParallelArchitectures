@@ -2,17 +2,9 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <limits.h>
-#include <sys/time.h>
 #include <omp.h>
 
-#define NROW 1768149
-
 #define ARRAY_SIZE 1000
-
-static inline double duration(struct timeval t0, struct timeval t1)
-{
-    return (t1.tv_sec - t0.tv_sec) + (t1.tv_usec - t0.tv_usec) / 1000000.0;
-}
 
 static inline long combine_into_store(int old_value, int new_value, int size) {
   int *array = (int *)malloc(sizeof(int) * size);
@@ -97,18 +89,4 @@ int recippar(int *edges, int nrow) {
     }
   }
   return count;
-}
-
-int main() {
-  FILE *twitter_combined = fopen("twitter_combined.txt", "r");
-  int *edges = (int *)malloc(sizeof(int) * NROW * 2);
-  for (int i = 0; i < NROW * 2; i++) {
-    fscanf(twitter_combined, "%d", &edges[i]);
-  }
-  struct timeval start, end;
-  gettimeofday(&start, NULL);
-  int count = recippar(edges, NROW);
-  gettimeofday(&end, NULL);
-  printf("Output: %d (%lfs)\n", count, duration(start, end));
-  return 0;
 }
