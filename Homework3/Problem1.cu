@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <cuda.h>
+#include <cublas.h>
 
 __device__ float array_mean(float *x, int n) {
   float sum = 0;
@@ -10,48 +11,42 @@ __device__ float array_mean(float *x, int n) {
 }
 
 __global__ void block_burst(float *x, int n, int k, long *meanIdx, float * meanData) {
-  int start = threadIdx.x * blockDim.x + threadIdx.y;
-  int length = threadIdx.x * blockDim.x + threadIdx.y + k;
-  extern __shared__ float currentmax[];
-  currentmax[threadIdx.x] = array_mean(x + start, length);
-  meanIdx[threadIdx.x] = (x + start) << 32 | length;
-  meanData[threadIdx.x] = currentmax[threadIdx.x];
+  int start = blockIdx.x * blockDim.x * blockDim.y;
+  int length = threadIdx.x + k;
+  meanData[blockIdx.x * blockDim.x * blockDim.y + threadIdx.x] = array_mean(x + start, length);
+  meanIdx[blockIdx.x * blockDim.x * blockDim.y + threadIdx.x] = (x + start) << 32 | length;
 }
 
 void maxburst(float *x, int n, int k, int *startend, float *bigmax) {
   cublasHandle_t handle;
+  cublasCreate(&handle);
   float *device_x;
   int maxIdx = 0;
   cudaMalloc((void **)&device_x, sizeof(float) * n);
   cudaMemcpy(device_x, x, sizeof(float) * n, cudaMemcpyHostToDevice);
-  int *device_result;
-  cudaMalloc((void **)&device_result, sizeof(int) * 3);
 
   long* meanIdx;
-  cudaMalloc((void **)&meanIdx, sizeof(long) * n);// size change
+  cudaMalloc((void **)&meanIdx, sizeof(long) * n);//need to change size change
 
   float *meanData;
   cudaMalloc((void **)&meanData, sizeof(float) * n);// size
 
-  dim3 dimGrid(n - k + 1, 1);
-  dim3 dimBlock(n, 1, 1);
+  dim3 dimGrid(n - k + 1, 1); //
+  dim3 dimBlock(n, 1, 1); //
 
   block_burst<<<dimGrid, dimBlock, (n - k + 1) * n>>>(device_x, n, k, meanIdx, meanData);
 
-  cudaMemcpy()
-  // cudaMemcpy(startend, device_result, sizeof(int) * 2, cudaMemcpyDeviceToHost);
-  // cudaMemcpy(bigmax, device_result + 2, sizeof(int) * 1, cudaMemcpyDeviceToHost);
-  cudaMemcpy();
-  cudaMemcpy();
-
   cudaThreadSynchronize();
-  cublasStatus_t cublasIsamax(handle, n, meanData, 0, &maxIdx);
+
+  cublasIsamax(handle, n, meanData, 0, &maxIdx);
+
   long index = meanIdx[maxIdx];
   startend[1] = index & 0xffffffff;
   startend[0] = index >> 32;
   *bigmax = meanData[maxIdx];
+  cudaFree(meanIdx);
+  cudaFree(meanData);
   cudaFree(device_x);
-  cudaFree(device_result);
 }
 
 int main(int argc, char const *argv[]) {
