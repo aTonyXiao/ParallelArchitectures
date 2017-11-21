@@ -27,10 +27,10 @@ __global__ void deviceburst(float *x, int n, int k, float *bigmaxs, int *starten
     float next = x[left + length];
     if (next > mean) {
       if (next > x[left]) {
-        sum += next - x[left];
+        sum = sum + next - x[left];
         left += 1;
       } else {
-        sum += next;
+        sum = sum + next;
         length += 1;
       }
     } else {
