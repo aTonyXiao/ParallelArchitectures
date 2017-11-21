@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <cuda.h>
+#include "cublas_v2.h"
 
 __device__ float arraysum(float *x, int n) {
   float sum = 0;
@@ -82,18 +83,16 @@ void maxburst(float *x, int n, int k, int *startend, float *bigmax) {
 
   cudaFree(device_x);
 
-  float *bigmaxs = (float *)malloc(sizeof(float) * threads_count);
-  cudaMemcpy(bigmaxs, device_bigmaxs, sizeof(float) * threads_count, cudaMemcpyDeviceToHost);
+  cublasHandle_t handle;
+  cublasCreate(&handle);
+  int maxidx;
+  cublasIsamax(handle, threads_count, device_bigmaxs, 1, &maxidx);
+  maxidx -= 1;
+  cudaMemcpy(bigmax, device_bigmaxs + maxidx, sizeof(float), cudaMemcpyDeviceToHost);
+  cudaMemcpy(startend, device_startends + maxidx * 2, sizeof(int) * 2, cudaMemcpyDeviceToHost);
   cudaFree(device_bigmaxs);
-
-  int *startends = (int *)malloc(sizeof(int) * threads_count * 2);
-  cudaMemcpy(startends, device_startends, sizeof(int) * threads_count * 2, cudaMemcpyDeviceToHost);
   cudaFree(device_startends);
-
-  int maxidx = arraymaxidx(bigmaxs, threads_count);
-  bigmax[0] = bigmaxs[maxidx];
-  startend[0] = startends[maxidx * 2];
-  startend[1] = startends[maxidx * 2 + 1];
+  cublasDestroy(handle);
 }
 
 // ----
