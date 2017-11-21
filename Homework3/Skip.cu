@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <cuda.h>
 
 __device__ float arraysum(float *x, int n) {
@@ -10,7 +9,7 @@ __device__ float arraysum(float *x, int n) {
 }
 
 __global__ void deviceburst(float *x, int n, int k, float *bigmaxs, int *startend) {
-  int partition = n / (blockDim.x * gridDim.x) + 1;
+  int partition = (n - k + 1) / (blockDim.x * gridDim.x) + 1;
   int me = blockIdx.x * blockDim.x + threadIdx.x;
 
   int left = me * partition;
@@ -28,14 +27,14 @@ __global__ void deviceburst(float *x, int n, int k, float *bigmaxs, int *starten
     float next = x[left + length];
     if (next > mean) {
       if (next > x[left]) {
-        sum = sum + next - x[left];
+        sum += next - x[left];
         left += 1;
       } else {
-        sum = sum + next;
+        sum += next;
         length += 1;
       }
     } else {
-      left = left + length - k + 1;
+      left += length - k + 1;
       length = k;
       sum = arraysum(x + left, length);
     }
@@ -96,13 +95,14 @@ void maxburst(float *x, int n, int k, int *startend, float *bigmax) {
   startend[1] = startends[maxidx * 2 + 1];
 }
 
-// ----
+// -------
 // Testing
 //
 // CSIF
 // clear && /usr/local/cuda-8.0/bin/nvcc -Wno-deprecated-gpu-targets -g -G Skip.cu && a.out
 
-#include <sys/time.h> // TODO: Remove before submit
+#include <stdio.h>
+#include <sys/time.h>
 
 int main() {
   int n = 500000;
