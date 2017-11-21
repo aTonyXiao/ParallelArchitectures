@@ -1,6 +1,3 @@
-// CSIF
-// clear && /usr/local/cuda-8.0/bin/nvcc -Wno-deprecated-gpu-targets -g -G Skip.cu && a.out
-
 #include <stdio.h>
 #include <cuda.h>
 
@@ -13,9 +10,8 @@ __device__ float arraysum(float *x, int n) {
 }
 
 __global__ void deviceburst(float *x, int n, int k, float *bigmaxs, int *startend) {
-  // TODO: Better partition?
   int partition = n / (blockDim.x * gridDim.x) + 1;
-  int me = blockIdx.x * gridDim.x + threadIdx.x;
+  int me = blockIdx.x * blockDim.x + threadIdx.x;
 
   int left = me * partition;
   int left_limit = left + partition;
@@ -50,7 +46,6 @@ __global__ void deviceburst(float *x, int n, int k, float *bigmaxs, int *starten
       bigmaxs[me] = mean;
     }
   }
-  printf("range %d to %d maxmean: %f (from %d to %d)\n", left, left_limit, bigmaxs[me], startend[me * 2], startend[me * 2 + 1]);
 }
 
 int arraymaxidx(float *x, int n) {
@@ -66,8 +61,8 @@ int arraymaxidx(float *x, int n) {
 }
 
 void maxburst(float *x, int n, int k, int *startend, float *bigmax) {
-  int gridDimX = 2; // 65536;
-  int blockDimX = 2; // 512;
+  int gridDimX = 128;
+  int blockDimX = 256;
   int threads_count = gridDimX * blockDimX;
 
   float *device_x;
@@ -101,10 +96,29 @@ void maxburst(float *x, int n, int k, int *startend, float *bigmax) {
   startend[1] = startends[maxidx * 2 + 1];
 }
 
+// ----
+// Testing
+//
+// CSIF
+// clear && /usr/local/cuda-8.0/bin/nvcc -Wno-deprecated-gpu-targets -g -G Skip.cu && a.out
+
+#include <sys/time.h> // TODO: Remove before submit
+
 int main() {
-  float input[] = {1, 2, 3, 4, 5, 4, 8, 9, 9};
+  int n = 500000;
+  int k = 200;
+  float *x = (float *)malloc(sizeof(float) * n);
+  srand(0);
+  for (int i = 0; i < n; i++) {
+    x[i] = (float)rand() / (float)(RAND_MAX / 100.0);
+  }
   int startend[] = {0, 0};
   float bigmax = 0;
-  maxburst(input, 9, 3, startend, &bigmax);
-  printf ("%f (from %d to %d)\n", bigmax, startend[0], startend[1]);
+  struct timeval start;
+  gettimeofday(&start, NULL);
+  maxburst(x, n, k, startend, &bigmax);
+  struct timeval end;
+  gettimeofday(&end, NULL);
+  float duration = (end.tv_sec - start.tv_sec) * 1000.0 + (end.tv_usec - start.tv_usec) / 1000.0;
+  printf("%f (from %d to %d) (%fms)\n", bigmax, startend[0], startend[1], duration);
 }
