@@ -161,25 +161,3 @@ int recippar(int *edges, int nrow) {
     return other_node_recippar(edges, nrow, number_of_nodes, current_node_index);
   }
 }
-
-int main(int argc, char** argv) {
-  int NROW = 1768149;
-  FILE *twitter_combined = fopen("twitter_combined.txt", "r");
-  int *edges = (int *)malloc(sizeof(int) * NROW * 2);
-  for (int i = 0; i < NROW * 2; i++) {
-    fscanf(twitter_combined, "%d", &edges[i]);
-  }
-  MPI_Init(&argc, &argv);
-  double start_time, end_time;
-  MPI_Barrier(MPI_COMM_WORLD);
-  start_time = MPI_Wtime();
-  int count = recippar(edges, NROW);
-  struct timeval end;
-  end_time = MPI_Wtime();
-  MPI_Barrier(MPI_COMM_WORLD);
-  MPI_Finalize();
-  if (count != -1) {
-    printf("Count (%lfs): %d\n", end_time - start_time, count);
-  }
-  return 0;
-}
